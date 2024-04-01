@@ -96,7 +96,7 @@ function(bootloader_build_combined NAME)
 
 	add_custom_target(${NAME}_hdr DEPENDS ${NAME} rp2040-spi-bootloader)
 	add_custom_command(TARGET ${NAME}_hdr
-		COMMAND ${BOOTLOADER_SRC_DIR}/gen_imghdr.py --map ${BOOTLOADER_BIN_DIR}/bootloader.elf.map --section .app_bin ${APP_BIN} ${APP_HDR}
+		COMMAND ${BOOTLOADER_SRC_DIR}/gen_imghdr.py --map ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf.map --section .app_bin ${APP_BIN} ${APP_HDR}
 	)
 
 	add_custom_target(${COMBINED} ALL)
@@ -104,7 +104,7 @@ function(bootloader_build_combined NAME)
 	add_custom_command(TARGET ${COMBINED}
 		COMMAND ${CMAKE_OBJCOPY}
 			--update-section .app_hdr=${APP_HDR}
-			--update-section .app_bin=${APP_BIN} ${BOOTLOADER_BIN_DIR}/bootloader.elf ${COMBINED}.elf
+			--update-section .app_bin=${APP_BIN} ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf ${COMBINED}.elf
 	)
 	list(APPEND clean_files ${COMBINED}.bin)
 	list(APPEND clean_files ${COMBINED}.elf)
