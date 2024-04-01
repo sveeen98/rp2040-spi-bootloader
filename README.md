@@ -1,11 +1,8 @@
-# RP2040 Serial Bootloader
+# RP2040 SPI Bootloader
 
-This is a bootloader for the RP2040 which enables code upload via UART.
+The RP2040 SPI Bootloader is a fork of the [RP2040 Serial Bootloader](https://github.com/usedbytes/rp2040-serial-bootloader.git) and enables code upload to the RP2040 microcontroller via SPI.
+This is useful in combination with an ESP8266 or ESP32 microcontroller to allow programming via Bluetooth or Wi-Fi. 
 
-There's a more complete description at: https://blog.usedbytes.com/2021/12/pico-serial-bootloader/
+For a more detailed description of the bootloader, check out the original blog entry at: https://blog.usedbytes.com/2021/12/pico-serial-bootloader/
 
-There are currently two tools I know of which can be used to upload code to it:
-
-* [serial-flash](https://github.com/usedbytes/serial-flash) - my tool written in `go`
-* [pico-py-serial-flash](https://github.com/ConfedSolutions/pico-py-serial-flash) - a similar tool written in Python, contributed by another user.
-
+The original [serial-flash](https://github.com/usedbytes/serial-flash) tool can be used for the code upload.

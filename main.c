@@ -1,7 +1,14 @@
 /**
- * Copyright (c) 2021 Brian Starkey <stark3y@gmail.com>
+ * @file main.c
+ * @brief The RP2040 SPI Bootloader enables code upload to the RP2040 microcontroller via SPI.
+ * 
+ * This project is a fork of Brian Starkey's RP2040 SPI Bootloader. The original project can be found at 
+ * https://github.com/usedbytes/rp2040-serial-bootloader.git
  *
- * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * @author Sven Koch
+ * @date 2024
+ * @license BSD-3-Clause
  */
 #include <stdio.h>
 #include <string.h>
@@ -10,11 +17,11 @@
 #include "pico/time.h"
 #include "hardware/dma.h"
 #include "hardware/flash.h"
+#include "hardware/spi.h"
 #include "hardware/structs/dma.h"
 #include "hardware/structs/watchdog.h"
 #include "hardware/gpio.h"
 #include "hardware/resets.h"
-#include "hardware/uart.h"
 #include "hardware/watchdog.h"
 
 #ifdef DEBUG
@@ -31,12 +38,17 @@
 //  - BOOTLOADER_ENTRY_PIN is low
 //  - Watchdog scratch[5] == BOOTLOADER_ENTRY_MAGIC && scratch[6] == ~BOOTLOADER_ENTRY_MAGIC
 //  - No valid image header
-#define BOOTLOADER_ENTRY_PIN 15
+#define BOOTLOADER_ENTRY_PIN 13
 #define BOOTLOADER_ENTRY_MAGIC 0xb105f00d
 
-#define UART_TX_PIN 0
-#define UART_RX_PIN 1
-#define UART_BAUD   921600
+#define SPI_SCK_PIN  10
+#define SPI_MISO_PIN 11
+#define SPI_MOSI_PIN 8
+#define SPI_CS_PIN   9
+
+#define SPI_IRQ_PIN  7
+
+#define SPI_FREQ     1000 * 1000
 
 #define CMD_SYNC   (('S' << 0) | ('Y' << 8) | ('N' << 16) | ('C' << 24))
 #define CMD_READ   (('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
@@ -545,7 +557,7 @@ static const struct command_desc *find_command_desc(uint32_t opcode)
 }
 
 struct cmd_context {
-	uint8_t *uart_buf;
+	uint8_t *spi_buf;
 	const struct command_desc *desc;
 	uint32_t opcode;
 	uint32_t status;
@@ -577,7 +589,7 @@ static enum state state_wait_for_sync(struct cmd_context *ctx)
 	gpio_put(PICO_DEFAULT_LED_PIN, 1);
 
 	while (idx < sizeof(ctx->opcode)) {
-		uart_read_blocking(uart0, &recv[idx], 1);
+		spi_read_blocking(spi1, 0, &recv[idx], 1);
 		gpio_xor_mask((1 << PICO_DEFAULT_LED_PIN));
 
 		if (recv[idx] != match[idx]) {
@@ -596,7 +608,7 @@ static enum state state_wait_for_sync(struct cmd_context *ctx)
 
 static enum state state_read_opcode(struct cmd_context *ctx)
 {
-	uart_read_blocking(uart0, (uint8_t *)&ctx->opcode, sizeof(ctx->opcode));
+	spi_read_blocking(spi1, 0, (uint8_t *)&ctx->opcode, sizeof(ctx->opcode));
 
 	return STATE_READ_ARGS;
 }
@@ -611,12 +623,12 @@ static enum state state_read_args(struct cmd_context *ctx)
 	}
 
 	ctx->desc = desc;
-	ctx->args = (uint32_t *)(ctx->uart_buf + sizeof(ctx->opcode));
+	ctx->args = (uint32_t *)(ctx->spi_buf + sizeof(ctx->opcode));
 	ctx->data = (uint8_t *)(ctx->args + desc->nargs);
 	ctx->resp_args = ctx->args;
 	ctx->resp_data = (uint8_t *)(ctx->resp_args + desc->resp_nargs);
 
-	uart_read_blocking(uart0, (uint8_t *)ctx->args, sizeof(*ctx->args) * desc->nargs);
+	spi_read_blocking(spi1, 0, (uint8_t *)ctx->args, sizeof(*ctx->args) * desc->nargs);
 
 	return STATE_READ_DATA;
 }
@@ -637,7 +649,7 @@ static enum state state_read_data(struct cmd_context *ctx)
 
 	// TODO: Check sizes
 
-	uart_read_blocking(uart0, (uint8_t *)ctx->data, ctx->data_len);
+	spi_read_blocking(spi1, 0, (uint8_t *)ctx->data, ctx->data_len);
 
 	return STATE_HANDLE_DATA;
 }
@@ -657,8 +669,16 @@ static enum state state_handle_data(struct cmd_context *ctx)
 	}
 
 	size_t resp_len = sizeof(ctx->status) + (sizeof(*ctx->resp_args) * desc->resp_nargs) + ctx->resp_data_len;
-	memcpy(ctx->uart_buf, &ctx->status, sizeof(ctx->status));
-	uart_write_blocking(uart0, ctx->uart_buf, resp_len);
+	memcpy(ctx->spi_buf, &ctx->status, sizeof(ctx->status));
+
+	// drive the SPI_IRQ_PIN pin low and enable output to indicate that we have data to send
+    gpio_set_outover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_HIGH);
+
+	spi_write_blocking(spi1, ctx->spi_buf, resp_len);
+
+	// put the SPI_IRQ_PIN pin back to high-impedance (not active)
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
 
 	return STATE_READ_OPCODE;
 }
@@ -666,8 +686,16 @@ static enum state state_handle_data(struct cmd_context *ctx)
 static enum state state_error(struct cmd_context *ctx)
 {
 	size_t resp_len = sizeof(ctx->status);
-	memcpy(ctx->uart_buf, &ctx->status, sizeof(ctx->status));
-	uart_write_blocking(uart0, ctx->uart_buf, resp_len);
+	memcpy(ctx->spi_buf, &ctx->status, sizeof(ctx->status));
+
+	// drive the SPI_IRQ_PIN pin low and enable output to indicate that we have data to send
+    gpio_set_outover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_HIGH);
+
+	spi_write_blocking(spi1, ctx->spi_buf, resp_len);
+
+	// put the SPI_IRQ_PIN pin back to high-impedance (not active)
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
 
 	return STATE_WAIT_FOR_SYNC;
 }
@@ -703,14 +731,27 @@ int main(void)
 
 	DBG_PRINTF_INIT();
 
-	uart_init(uart0, UART_BAUD);
-	gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-	gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-	uart_set_hw_flow(uart0, false, false);
+	// setup SPI
+	spi_init(spi1, SPI_FREQ);
+	spi_set_slave(spi1, true);
+	spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_1, SPI_MSB_FIRST);
+	gpio_set_function(SPI_SCK_PIN, GPIO_FUNC_SPI);
+	gpio_set_function(SPI_MISO_PIN, GPIO_FUNC_SPI);
+	gpio_set_function(SPI_MOSI_PIN, GPIO_FUNC_SPI);
+	gpio_set_function(SPI_CS_PIN, GPIO_FUNC_SPI);
+
+	// put the SPI_IRQ_PIN pin to high-impedance (not active)
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
+
+	// setup interrupt pin
+	gpio_set_function(SPI_IRQ_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(SPI_IRQ_PIN, GPIO_OUT);
+    gpio_set_slew_rate(SPI_IRQ_PIN, GPIO_SLEW_RATE_FAST);
+    gpio_disable_pulls(SPI_IRQ_PIN);
 
 	struct cmd_context ctx;
-	uint8_t uart_buf[(sizeof(uint32_t) * (1 + MAX_NARG)) + MAX_DATA_LEN];
-	ctx.uart_buf = uart_buf;
+	uint8_t spi_buf[(sizeof(uint32_t) * (1 + MAX_NARG)) + MAX_DATA_LEN];
+	ctx.spi_buf = spi_buf;
 	enum state state = STATE_WAIT_FOR_SYNC;
 
 	while (1) {
