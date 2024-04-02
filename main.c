@@ -65,7 +65,9 @@
 #define RSP_OK   (('O' << 0) | ('K' << 8) | ('O' << 16) | ('K' << 24))
 #define RSP_ERR  (('E' << 0) | ('R' << 8) | ('R' << 16) | ('!' << 24))
 
-#define IMAGE_HEADER_OFFSET (28 * 1024)
+struct image_header app_image_header;
+
+#define IMAGE_HEADER_OFFSET ((uint32_t)&app_image_header - XIP_BASE)
 
 #define WRITE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET + FLASH_SECTOR_SIZE)
 #define ERASE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET)
@@ -720,9 +722,7 @@ int main(void)
 
 	sleep_ms(10);
 
-	struct image_header *hdr = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
-
-	if (!should_stay_in_bootloader() && image_header_ok(hdr)) {
+	if (!should_stay_in_bootloader() && image_header_ok(&app_image_header)) {
 		uint32_t vtor = *((uint32_t *)(XIP_BASE + IMAGE_HEADER_OFFSET));
 		disable_interrupts();
 		reset_peripherals();

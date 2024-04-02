@@ -54,7 +54,7 @@ SECTIONS
      */
     .app_hdr : {
         . = ALIGN(4k);
-        __app_hdr = .;
+        app_image_header = .;
         LONG(0xdeaddead)
         LONG(0)
         LONG(0xdeaddead)
