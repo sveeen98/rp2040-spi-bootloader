@@ -24,6 +24,8 @@
 #include "hardware/resets.h"
 #include "hardware/watchdog.h"
 
+#include "bootloader/reboot.h"
+
 #ifdef DEBUG
 #include <stdio.h>
 #include "pico/stdio_usb.h"
@@ -39,7 +41,6 @@
 //  - Watchdog scratch[5] == BOOTLOADER_ENTRY_MAGIC && scratch[6] == ~BOOTLOADER_ENTRY_MAGIC
 //  - No valid image header
 #define BOOTLOADER_ENTRY_PIN 13
-#define BOOTLOADER_ENTRY_MAGIC 0xb105f00d
 
 #define SPI_SCK_PIN  10
 #define SPI_MISO_PIN 11
@@ -512,23 +513,6 @@ static uint32_t handle_info(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_
 	return RSP_OK;
 }
 
-static void do_reboot(bool to_bootloader)
-{
-	hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
-	if (to_bootloader) {
-		watchdog_hw->scratch[5] = BOOTLOADER_ENTRY_MAGIC;
-		watchdog_hw->scratch[6] = ~BOOTLOADER_ENTRY_MAGIC;
-	} else {
-		watchdog_hw->scratch[5] = 0;
-		watchdog_hw->scratch[6] = 0;
-	}
-	watchdog_reboot(0, 0, 0);
-	while (1) {
-		tight_loop_contents();
-		asm("");
-	}
-}
-
 static uint32_t size_reboot(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
 {
 	*data_len_out = 0;
@@ -540,7 +524,7 @@ static uint32_t size_reboot(uint32_t *args_in, uint32_t *data_len_out, uint32_t 
 static uint32_t handle_reboot(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
 {
 	// Will never return
-	do_reboot(args_in[0]);
+	bootloader_reboot(args_in[0]);
 
 	return RSP_ERR;
 }

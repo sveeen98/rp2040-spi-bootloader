@@ -58,7 +58,10 @@ pico_add_extra_outputs(rp2040-spi-bootloader)
 pico_enable_stdio_uart(rp2040-spi-bootloader 0)
 pico_enable_stdio_usb(rp2040-spi-bootloader 1)
 
+add_subdirectory(reboot)
+
 target_link_libraries(rp2040-spi-bootloader
+					  bootloader_reboot
                       pico_stdlib
                       hardware_dma
                       hardware_flash
