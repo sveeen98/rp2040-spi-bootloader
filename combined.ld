@@ -21,12 +21,12 @@
     __stack (== StackTop)
 */
 
-/* Skip 16kB at the start of flash, that's where our bootloader is */
+/* Skip 32kB at the start of flash, that's where the bootloader is. */
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = 12k
-    FLASH_IMGHDR(rx) : ORIGIN = 0x10000000 + 12k, LENGTH = 4k
-    FLASH_APP(rx) : ORIGIN = 0x10000000 + 16k, LENGTH = 2048k - 16k
+    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = 28k
+    FLASH_IMGHDR(rx) : ORIGIN = 0x10000000 + 28k, LENGTH = 4k
+    FLASH_APP(rx) : ORIGIN = 0x10000000 + 32k, LENGTH = 2048k - 32k
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
@@ -49,9 +49,8 @@ SECTIONS
     ASSERT(__boot2_end__ - __boot2_start__ == 256,
         "ERROR: Pico second stage bootloader must be 256 bytes in size")
 
-    /*
-     * Name a section for the image header.
-     * The contents will get replaced post-build
+    /* Name a section for the image header.
+       In combined builds, the contents will get replaced post-build.
      */
     .app_hdr : {
         . = ALIGN(4k);
@@ -61,6 +60,7 @@ SECTIONS
         LONG(0xdeaddead)
     } > FLASH_IMGHDR
 
+    /* Name a section for the app binary. */
     .app_bin : {
         . = ALIGN(4k);
         __app_bin = .;
