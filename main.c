@@ -49,7 +49,7 @@
 
 #define SPI_IRQ_PIN  7
 
-#define SPI_FREQ     1000 * 1000
+#define SPI_FREQ     8000 * 1000
 
 #define CMD_SYNC   (('S' << 0) | ('Y' << 8) | ('N' << 16) | ('C' << 24))
 #define CMD_READ   (('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
