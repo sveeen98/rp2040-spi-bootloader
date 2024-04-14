@@ -724,14 +724,14 @@ int main(void)
 	gpio_set_function(SPI_MOSI_PIN, GPIO_FUNC_SPI);
 	gpio_set_function(SPI_CS_PIN, GPIO_FUNC_SPI);
 
-	// put the SPI_IRQ_PIN pin to high-impedance (not active)
-    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
-
 	// setup interrupt pin
 	gpio_set_function(SPI_IRQ_PIN, GPIO_FUNC_SIO);
     gpio_set_dir(SPI_IRQ_PIN, GPIO_OUT);
     gpio_set_slew_rate(SPI_IRQ_PIN, GPIO_SLEW_RATE_FAST);
     gpio_disable_pulls(SPI_IRQ_PIN);
+
+	// put the SPI_IRQ_PIN pin to high-impedance (not active)
+    gpio_set_oeover(SPI_IRQ_PIN, GPIO_OVERRIDE_LOW);
 
 	struct cmd_context ctx;
 	uint8_t spi_buf[(sizeof(uint32_t) * (1 + MAX_NARG)) + MAX_DATA_LEN];
