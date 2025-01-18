@@ -61,72 +61,82 @@ pico_enable_stdio_usb(rp2040-spi-bootloader 1)
 add_subdirectory(reboot)
 
 target_link_libraries(rp2040-spi-bootloader
-					  bootloader_reboot
+                      bootloader_reboot
                       pico_stdlib
                       hardware_dma
                       hardware_flash
-					  hardware_spi
+                      hardware_spi
                       hardware_structs
                       hardware_resets
                       cmsis_core)
 
 # Provide a helper to build a standalone target
 function(bootloader_build_standalone NAME)
-	get_target_property(BOOTLOADER_SRC_DIR rp2040-spi-bootloader SOURCE_DIR)
-	pico_set_linker_script(${NAME} ${BOOTLOADER_SRC_DIR}/standalone.ld)
-	pico_add_bin_output(${NAME})
+    get_target_property(BOOTLOADER_SRC_DIR rp2040-spi-bootloader SOURCE_DIR)
+    pico_set_linker_script(${NAME} ${BOOTLOADER_SRC_DIR}/standalone.ld)
+    pico_add_bin_output(${NAME})
 endfunction()
 
 # Provide a helper to build a combined target
 function(bootloader_build_combined NAME)
-	set(APP_BIN ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.bin)
-	set(APP_HDR ${CMAKE_CURRENT_BINARY_DIR}/${NAME}_hdr.bin)
+    set(APP_BIN ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.bin)
+    set(APP_HDR ${CMAKE_CURRENT_BINARY_DIR}/${NAME}_hdr.bin)
 
-	set(COMBINED ${NAME}_combined)
+    set(COMBINED ${NAME}_combined)
 
-	get_target_property(BOOTLOADER_SRC_DIR rp2040-spi-bootloader SOURCE_DIR)
-	get_target_property(BOOTLOADER_BIN_DIR rp2040-spi-bootloader BINARY_DIR)
+    get_target_property(BOOTLOADER_SRC_DIR rp2040-spi-bootloader SOURCE_DIR)
+    get_target_property(BOOTLOADER_BIN_DIR rp2040-spi-bootloader BINARY_DIR)
 
-	get_directory_property(initial_clean ADDITIONAL_MAKE_CLEAN_FILES)
-	list(APPEND clean_files ${initial_clean})
-	list(APPEND clean_files ${APP_BIN})
-	list(APPEND clean_files ${APP_HDR})
+    get_directory_property(initial_clean ADDITIONAL_MAKE_CLEAN_FILES)
+    list(APPEND clean_files ${initial_clean})
+    list(APPEND clean_files ${APP_BIN})
+    list(APPEND clean_files ${APP_HDR})
 
-	# The app must be built with the correct linker script (and a .bin)
-	bootloader_build_standalone(${NAME})
+    # The app must be built with the correct linker script (and a .bin)
+    bootloader_build_standalone(${NAME})
 
-	pico_set_linker_script(rp2040-spi-bootloader ${BOOTLOADER_SRC_DIR}/combined.ld)
+    pico_set_linker_script(rp2040-spi-bootloader ${BOOTLOADER_SRC_DIR}/combined.ld)
 
-	add_custom_target(${NAME}_hdr DEPENDS ${NAME} rp2040-spi-bootloader)
-	add_custom_command(TARGET ${NAME}_hdr
-		COMMAND ${BOOTLOADER_SRC_DIR}/gen_imghdr.py --map ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf.map --section .app_bin ${APP_BIN} ${APP_HDR}
-	)
+    add_custom_target(${NAME}_hdr DEPENDS ${NAME} rp2040-spi-bootloader)
+    add_custom_command(TARGET ${NAME}_hdr
+        COMMAND ${BOOTLOADER_SRC_DIR}/gen_imghdr.py --map ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf.map --section .app_bin ${APP_BIN} ${APP_HDR}
+    )
 
-	add_custom_target(${COMBINED} ALL)
-	add_dependencies(${COMBINED} rp2040-spi-bootloader ${NAME}_hdr)
-	add_custom_command(TARGET ${COMBINED}
-		COMMAND ${CMAKE_OBJCOPY}
-			--update-section .app_hdr=${APP_HDR}
-			--update-section .app_bin=${APP_BIN} ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf ${COMBINED}.elf
-	)
-	list(APPEND clean_files ${COMBINED}.bin)
-	list(APPEND clean_files ${COMBINED}.elf)
+    add_custom_target(${COMBINED} ALL)
+    add_dependencies(${COMBINED} rp2040-spi-bootloader ${NAME}_hdr)
+    add_custom_command(TARGET ${COMBINED}
+        COMMAND ${CMAKE_OBJCOPY}
+            --update-section .app_hdr=${APP_HDR}
+            --update-section .app_bin=${APP_BIN} ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf ${COMBINED}.elf
+    )
+    list(APPEND clean_files ${COMBINED}.bin)
+    list(APPEND clean_files ${COMBINED}.elf)
 
-	add_custom_command(TARGET ${COMBINED} POST_BUILD
-		COMMAND ${CMAKE_OBJCOPY} -Obinary ${COMBINED}.elf ${COMBINED}.bin
-	)
+    add_custom_command(TARGET ${COMBINED} POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -Obinary ${COMBINED}.elf ${COMBINED}.bin
+    )
 
-	if (NOT ELF2UF2_FOUND)
-		set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PICO_SDK_PATH}/tools)
-		find_package(ELF2UF2)
-	endif()
+    # PICO_CMAKE_CONFIG: PICO_NO_UF2, Disable UF2 output, type=bool, default=0, group=build
+    if (NOT (PICO_NO_UF2 OR PICO_NO_PICOTOOL))
+        get_target_property(picotool_family ${COMBINED} PICOTOOL_UF2_FAMILY)
+        if (NOT picotool_family)
+            if (PICOTOOL_DEFAULT_FAMILY)
+                set(picotool_family ${PICOTOOL_DEFAULT_FAMILY})
+            else()
+                set(picotool_family ${PICO_PLATFORM})
+            endif()
+        endif()
 
-	if (ELF2UF2_FOUND)
-		add_custom_command(TARGET ${COMBINED} POST_BUILD
-			COMMAND ELF2UF2 ${COMBINED}.elf ${COMBINED}.uf2
-		)
-		list(APPEND clean_files ${COMBINED}.uf2)
-	endif()
+        add_custom_command(TARGET ${COMBINED} POST_BUILD
+            COMMAND picotool
+            ARGS uf2 convert
+                --quiet
+                ${COMBINED}.elf
+                ${COMBINED}.uf2
+                --family ${picotool_family}
+            COMMAND_EXPAND_LISTS
+            VERBATIM)
+    endif()
 
-	set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${clean_files}")
+    set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${clean_files}")
 endfunction()
