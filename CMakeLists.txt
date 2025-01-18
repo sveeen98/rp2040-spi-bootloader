@@ -98,13 +98,13 @@ function(bootloader_build_combined NAME)
     pico_set_linker_script(rp2040-spi-bootloader ${BOOTLOADER_SRC_DIR}/combined.ld)
 
     add_custom_target(${NAME}_hdr DEPENDS ${NAME} rp2040-spi-bootloader)
-    add_custom_command(TARGET ${NAME}_hdr
+    add_custom_command(TARGET ${NAME}_hdr POST_BUILD
         COMMAND ${BOOTLOADER_SRC_DIR}/gen_imghdr.py --map ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf.map --section .app_bin ${APP_BIN} ${APP_HDR}
     )
 
     add_custom_target(${COMBINED} ALL)
     add_dependencies(${COMBINED} rp2040-spi-bootloader ${NAME}_hdr)
-    add_custom_command(TARGET ${COMBINED}
+    add_custom_command(TARGET ${COMBINED} POST_BUILD
         COMMAND ${CMAKE_OBJCOPY}
             --update-section .app_hdr=${APP_HDR}
             --update-section .app_bin=${APP_BIN} ${BOOTLOADER_BIN_DIR}/rp2040-spi-bootloader.elf ${COMBINED}.elf
